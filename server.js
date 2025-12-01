@@ -16,12 +16,17 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 /**
- * 取得高雄天氣預報
+ * 取得天氣預報（通用版）
  * CWA 氣象資料開放平臺 API
+ * GET /api/weather?city=臺南市
  * 使用「一般天氣預報-今明 36 小時天氣預報」資料集
  */
-const getKaohsiungWeather = async (req, res) => {
+const getWeather = async (req, res) => {
   try {
+    // 接收前端傳來的 city 參數，如果沒傳就預設 "臺南市"
+    // 這是「防呆」設計，避免程式崩潰
+    const city = req.query.city || "臺南市"; 
+
     // 檢查是否有設定 API Key
     if (!CWA_API_KEY) {
       return res.status(500).json({
@@ -37,18 +42,18 @@ const getKaohsiungWeather = async (req, res) => {
       {
         params: {
           Authorization: CWA_API_KEY,
-          locationName: "臺南市",
+          locationName: city, // 這裡使用變數，不再是寫死的字串
         },
       }
     );
 
-    // 取得高雄市的天氣資料
+    // 取得該城市的天氣資料
     const locationData = response.data.records.location[0];
 
     if (!locationData) {
       return res.status(404).json({
         error: "查無資料",
-        message: "無法取得高雄市天氣資料",
+        message: "找不到 ${city} 的天氣資料，是不是被任意門傳送到外太空了？",
       });
     }
 
@@ -129,9 +134,9 @@ const getKaohsiungWeather = async (req, res) => {
 // Routes
 app.get("/", (req, res) => {
   res.json({
-    message: "歡迎使用 CWA 天氣預報 API",
+    message: "歡迎使用天氣任意門 API",
     endpoints: {
-      kaohsiung: "/api/weather/kaohsiung",
+      weather: "/api/weather?city=臺南市", // 更新文件說明
       health: "/api/health",
     },
   });
@@ -141,8 +146,8 @@ app.get("/api/health", (req, res) => {
   res.json({ status: "OK", timestamp: new Date().toISOString() });
 });
 
-// 取得高雄天氣預報
-app.get("/api/weather/kaohsiung", getKaohsiungWeather);
+// 修改路由對應
+app.get("/api/weather", getWeather); // 不再限定 kaohsiung
 
 // Error handling middleware
 app.use((err, req, res, next) => {
