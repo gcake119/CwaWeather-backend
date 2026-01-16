@@ -1,0 +1,49 @@
+name: Backup progress.json
+
+on:
+  schedule:
+    # UTC 時間，每天 19:00（台灣時間 03:00）執行
+    - cron: '0 19 * * *'
+  workflow_dispatch: # 允許手動觸發備份
+
+permissions:
+  contents: write
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      
+      - name: Create backup directory
+        run: mkdir -p backups
+      
+      - name: Download and backup progress.json
+        env:
+          ZEABUR_API: ${{ secrets.ZEABUR_API_URL }}
+          API_PASSWORD: ${{ secrets.API_PASSWORD }}
+        run: |
+          # 取得 token
+          TOKEN=$(curl -s "$ZEABUR_API/api/login" \
+            -X POST \
+            -H "Content-Type: application/json" \
+            -d "{\"password\":\"$API_PASSWORD\"}" \
+            | grep -o '"token":"[^"]*' | cut -d'"' -f4)
+          
+          # 備份檔案
+          curl -s "$ZEABUR_API/api/export" \
+            -H "Authorization: Bearer $TOKEN" \
+            -o "backups/progress-$(date -u +%Y%m%d-%H%M%S).json"
+          
+          # 保留最近 30 個備份
+          cd backups
+          ls -t progress-*.json | tail -n +31 | xargs -r rm
+      
+      - name: Commit and push backup
+        run: |
+          git config --global user.name "GitHub Backup Bot"
+          git config --global user.email "noreply@github.com"
+          git add backups/
+          git diff --quiet && git diff --staged --quiet || (git commit -m "chore: auto backup progress.json [$(date -u +%Y-%m-%d)]" && git push)
